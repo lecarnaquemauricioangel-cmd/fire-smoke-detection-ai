@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% block titulo %}Detección en video{% endblock %}
+
+{% block contenido %}
+<h1 class="text-2xl font-display font-bold mb-6 flex items-center gap-3">
+  <i class="fa-solid fa-film text-red-500"></i> Detección de fuego y humo en video
+</h1>
+
+<div class="grid lg:grid-cols-2 gap-6 mb-10">
+  {% if videos_disponibles %}
+  <section class="rounded-2xl border border-soc-border glass p-6">
+    <h2 class="font-bold mb-1 flex items-center gap-2">
+      <i class="fa-solid fa-folder-open text-cyan-400"></i> Usar un video existente
+    </h2>
+    <p class="text-sm text-slate-500 mb-4">Videos ya disponibles en <code class="text-slate-400">static/uploads/</code>.</p>
+    <form action="{{ url_for('procesar_video') }}" method="post" id="formExistente" class="space-y-4">
+      <select name="video_existente" required
+              class="w-full bg-slate-900 border border-soc-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500/60">
+        {% for v in videos_disponibles %}
+        <option value="{{ v }}" {% if v == 'prueba_fuego.mp4' %}selected{% endif %}>{{ v }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" id="btnExistente"
+              class="w-full bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/40 text-cyan-300 transition font-bold py-3 rounded-xl flex items-center justify-center gap-2">
+        <i class="fa-solid fa-play"></i> Procesar video seleccionado
+      </button>
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="rounded-2xl border border-soc-border glass p-6">
+    <h2 class="font-bold mb-1 flex items-center gap-2">
+      <i class="fa-solid fa-upload text-red-400"></i> Subir un video nuevo
+    </h2>
+    <p class="text-sm text-slate-500 mb-4">Formatos soportados: MP4, AVI, MOV, MKV.</p>
+    <form action="{{ url_for('procesar_video') }}" method="post" enctype="multipart/form-data" id="formSubida" class="space-y-4">
+      <input type="file" name="video" accept=".mp4,.avi,.mov,.mkv" required
+             class="block w-full text-sm text-slate-300 bg-slate-900 rounded-xl border border-soc-border cursor-pointer
+                    file:mr-4 file:py-3 file:px-4 file:rounded-l-xl file:border-0 file:bg-red-600 file:text-white
+                    file:font-semibold hover:file:bg-red-700">
+      <button type="submit" id="btnSubida"
+              class="w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 transition text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 shadow-glow">
+        <i class="fa-solid fa-bolt"></i> Procesar video
+      </button>
+    </form>
+  </section>
+</div>
+
+<div id="avisoProcesando" class="hidden max-w-3xl mx-auto mb-8">
+  <div class="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+    <div class="h-full w-1/3 bg-gradient-to-r from-red-600 to-orange-500 rounded-full animate-barra-carga"></div>
+  </div>
+  <p class="text-center text-sm text-amber-300 mt-2 flex items-center justify-center gap-2">
+    <i class="fa-solid fa-spinner fa-spin"></i> Procesando video, esto puede tardar varios minutos según su duración...
+  </p>
+</div>
+
+{% if video_resultado %}
+  {% set disparar_alarma_video = severidad and severidad.nivel in ['MEDIA', 'ALTA'] %}
+  <script type="application/json" id="datosDeteccion">{{ {
+    "hay_fuego": severidad.hay_fuego if severidad else False,
+    "hay_humo": severidad.hay_humo if severidad else False,
+    "nivel": severidad.nivel if severidad else "BAJA",
+    "detecciones": total_detecciones or 0,
+  }|tojson }}</script>
+  {% if disparar_alarma_video %}
+  <div class="max-w-3xl mx-auto mb-4 flex justify-end">
+    <button id="btnSilenciarVideo" type="button"
+            class="bg-white/5 hover:bg-white/10 border border-soc-border transition px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2">
+      <i class="fa-solid fa-volume-xmark"></i> Desactivar alarma / Silenciar
+    </button>
+  </div>
+  {% endif %}
+
+  {% if severidad and severidad.hay_fuego %}
+  <div class="relative mb-6 rounded-2xl border-2 border-red-500 bg-red-700/20 px-6 py-5 flex items-center gap-4 animate-pulse max-w-3xl mx-auto overflow-hidden">
+    <div class="absolute inset-0 scanline"></div>
+    <span class="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-600 shadow-glow text-xl">
+      <i class="fa-solid fa-fire-flame-curved"></i>
+    </span>
+    <div class="relative">
+      <p class="font-display font-extrabold text-lg text-red-300">⚠ EMERGENCIA: FUEGO DETECTADO EN EL VIDEO</p>
+      <p class="text-sm text-red-200/90">
+        {% if alerta_enviada %}Alerta enviada a Telegram.{% else %}No se pudo enviar la alerta a Telegram.{% endif %}
+      </p>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="max-w-3xl mx-auto rounded-2xl border border-soc-border glass p-4 mb-6">
+    <h2 class="text-xs uppercase tracking-widest text-slate-500 font-mono mb-3 flex items-center gap-2">
+      <i class="fa-solid fa-clapperboard"></i> Video procesado
+    </h2>
+    <video id="videoResultado" controls class="w-full rounded-xl bg-black border border-soc-border">
+      <source src="{{ video_resultado }}" type="video/mp4">
+      Tu navegador no soporta la reproducción de video HTML5.
+    </video>
+  </div>
+
+  {% if severidad %}
+  <div class="grid md:grid-cols-3 gap-5 max-w-3xl mx-auto">
+    <div class="rounded-2xl border border-soc-border glass p-5 text-center">
+      <p class="text-xs uppercase tracking-widest text-slate-500 font-mono mb-2">Severidad general</p>
+      <span class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold border
+        {% if severidad.nivel == 'ALTA' %}bg-red-600/20 text-red-400 border-red-600/40
+        {% elif severidad.nivel == 'MEDIA' %}bg-amber-500/20 text-amber-300 border-amber-500/40
+        {% else %}bg-emerald-500/20 text-emerald-300 border-emerald-500/40{% endif %}">
+        {{ severidad.nivel }}
+      </span>
+    </div>
+    <div class="rounded-2xl border border-soc-border glass p-5 text-center">
+      <p class="text-xs uppercase tracking-widest text-slate-500 font-mono mb-2">Área máx. ocupada</p>
+      <p class="text-2xl font-display font-extrabold">{{ severidad.porcentaje_area }}%</p>
+    </div>
+    <div class="rounded-2xl border border-soc-border glass p-5 text-center">
+      <p class="text-xs uppercase tracking-widest text-slate-500 font-mono mb-2">Detecciones totales</p>
+      <p class="text-2xl font-display font-extrabold">{{ total_detecciones }}</p>
+    </div>
+  </div>
+  {% endif %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const INTERVALO_ALARMA_VIDEO_MS = 6000; // 5-6s: repite sirena+voz mientras el video esté en reproducción
+
+  // Engancha la alarma continua al ciclo de vida real de la reproducción:
+  // suena en bucle mientras el video esté en 'play' y se detiene en pausa o
+  // al terminar. Se llama una vez por cada video nuevo insertado en el DOM.
+  function engancharAlarmaContinuaVideo(datos) {
+    const videoEl = document.getElementById('videoResultado');
+    if (!videoEl) return;
+    const disparar = datos.nivel === 'MEDIA' || datos.nivel === 'ALTA';
+    if (!disparar) return;
+
+    videoEl.addEventListener('play', () => {
+      window.AlarmaVigiaFuego.iniciarAlarmaContinua(datos.hay_fuego, datos.hay_humo, INTERVALO_ALARMA_VIDEO_MS);
+    });
+    videoEl.addEventListener('pause', () => window.AlarmaVigiaFuego.detenerAlarmaContinua());
+    videoEl.addEventListener('ended', () => window.AlarmaVigiaFuego.detenerAlarmaContinua());
+
+    window.AlarmaVigiaFuego.inicializarBotonSilenciar(
+      document.getElementById('btnSilenciarVideo'), datos.hay_fuego, datos.hay_humo,
+      { continuo: true, videoEl, intervaloMs: INTERVALO_ALARMA_VIDEO_MS }
+    );
+  }
+
+  // Se reengancha con inicializarPaginaVideo() cada vez que se reemplaza el
+  // contenido de <main> (éxito o error), porque los <script> insertados vía
+  // innerHTML nunca se ejecutan solos.
+  function inicializarPaginaVideo() {
+    const aviso = document.getElementById('avisoProcesando');
+    const formExistente = document.getElementById('formExistente');
+    const btnExistente = document.getElementById('btnExistente');
+    const formSubida = document.getElementById('formSubida');
+    const btnSubida = document.getElementById('btnSubida');
+
+    async function manejarEnvio(e, form, boton) {
+      e.preventDefault();
+      // CRÍTICO: desbloquear el AudioContext EN ESTE MISMO gesto de clic en
+      // "Procesar video". Como ahora se envía por fetch() sin recargar la
+      // página, este contexto sigue "running" cuando termine el proceso.
+      window.AlarmaVigiaFuego.desbloquearConTono();
+
+      const textoOriginal = boton.innerHTML;
+      boton.disabled = true;
+      boton.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...';
+      if (aviso) aviso.classList.remove('hidden');
+
+      try {
+        const formData = new FormData(form);
+        const resp = await fetch(form.action, { method: 'POST', body: formData });
+        const html = await resp.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const nuevoMain = doc.querySelector('main');
+        if (!nuevoMain) throw new Error('Respuesta inesperada del servidor.');
+
+        document.querySelector('main').innerHTML = nuevoMain.innerHTML;
+        const nuevoTitulo = doc.querySelector('title');
+        if (nuevoTitulo) document.title = nuevoTitulo.textContent;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        const datosEl = document.getElementById('datosDeteccion');
+        if (datosEl) {
+          const datos = JSON.parse(datosEl.textContent);
+          if (datos.nivel === 'MEDIA' || datos.nivel === 'ALTA') {
+            // Aviso inmediato al terminar de procesar: el AudioContext
+            // desbloqueado arriba sigue vivo porque nunca hubo recarga.
+            window.AlarmaVigiaFuego.alertar(datos.hay_fuego, datos.hay_humo);
+          }
+          // El bucle continuo (sirena+voz cada 6s) se activa/desactiva solo
+          // según el usuario le dé play/pause al video -- no antes.
+          engancharAlarmaContinuaVideo(datos);
+        }
+        inicializarPaginaVideo(); // re-engancha los formularios recién insertados
+      } catch (err) {
+        console.error('[video] Error al procesar:', err);
+        boton.disabled = false;
+        boton.innerHTML = textoOriginal;
+        if (aviso) aviso.classList.add('hidden');
+        alert('Error de red al procesar el video. Verifica tu conexión e inténtalo de nuevo.');
+      }
+    }
+
+    if (formExistente) {
+      formExistente.addEventListener('submit', (e) => manejarEnvio(e, formExistente, btnExistente));
+    }
+    if (formSubida) {
+      formSubida.addEventListener('submit', (e) => manejarEnvio(e, formSubida, btnSubida));
+    }
+  }
+
+  inicializarPaginaVideo();
+</script>
+{% endblock %}

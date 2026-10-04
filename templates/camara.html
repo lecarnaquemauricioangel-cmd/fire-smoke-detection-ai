@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% block titulo %}Cámara en vivo{% endblock %}
+
+{% block contenido %}
+<h1 class="text-2xl font-display font-bold mb-6 flex items-center gap-3">
+  <i class="fa-solid fa-video text-red-500"></i> Vigilancia en tiempo real
+</h1>
+
+<div id="bannerEmergencia"
+     class="hidden mb-6 relative rounded-2xl border-2 border-red-500 bg-red-700/20 px-6 py-5 items-center gap-4 animate-pulse overflow-hidden max-w-3xl mx-auto">
+  <div class="absolute inset-0 scanline"></div>
+  <span class="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-600 shadow-glow text-xl">
+    <i class="fa-solid fa-fire-flame-curved"></i>
+  </span>
+  <div class="relative">
+    <p class="font-display font-extrabold text-lg text-red-300">⚠ EMERGENCIA: FUEGO DETECTADO</p>
+    <p id="bannerDetalle" class="text-sm text-red-200/90">Severidad: --</p>
+  </div>
+</div>
+
+<div class="max-w-3xl mx-auto">
+  <div class="relative bg-black rounded-2xl overflow-hidden border border-soc-border shadow-2xl">
+    <video id="video" autoplay playsinline muted class="w-full block"></video>
+    <canvas id="overlay" class="absolute top-0 left-0 w-full h-full pointer-events-none"></canvas>
+    <canvas id="captura" class="hidden"></canvas>
+
+    <!-- HUD estilo cámara de seguridad -->
+    <div class="absolute inset-0 pointer-events-none font-mono">
+      <!-- esquinas de encuadre -->
+      <div class="absolute top-3 left-3 w-8 h-8 border-t-2 border-l-2 border-cyan-400/70"></div>
+      <div class="absolute top-3 right-3 w-8 h-8 border-t-2 border-r-2 border-cyan-400/70"></div>
+      <div class="absolute bottom-3 left-3 w-8 h-8 border-b-2 border-l-2 border-cyan-400/70"></div>
+      <div class="absolute bottom-3 right-3 w-8 h-8 border-b-2 border-r-2 border-cyan-400/70"></div>
+
+      <div class="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/50 px-3 py-1 rounded-full">
+        <span id="dotRec" class="h-2 w-2 rounded-full bg-slate-500"></span>
+        <span id="estadoHud" class="text-[11px] tracking-widest text-slate-300">STANDBY</span>
+      </div>
+
+      <div class="absolute top-3 right-3 mr-10 text-right">
+        <p id="relojHud" class="text-[11px] text-cyan-300 bg-black/50 px-2 py-1 rounded">--:--:--</p>
+      </div>
+
+      <div class="absolute bottom-3 left-3 ml-10 text-[11px] text-slate-300 bg-black/50 px-2 py-1 rounded">
+        CAM-01 · ALMACÉN PRINCIPAL
+      </div>
+    </div>
+  </div>
+
+  <div class="flex flex-wrap items-center gap-3 mt-4">
+    <button id="btnIniciar" class="bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 transition px-5 py-3 rounded-xl font-semibold flex items-center gap-2">
+      <i class="fa-solid fa-play"></i> Iniciar cámara
+    </button>
+    <button id="btnDetener" class="bg-white/5 hover:bg-white/10 border border-soc-border transition px-5 py-3 rounded-xl font-semibold flex items-center gap-2" disabled>
+      <i class="fa-solid fa-stop"></i> Detener
+    </button>
+    <button id="btnSonido" type="button" title="Silenciar/activar alarma sonora"
+            class="bg-white/5 hover:bg-white/10 border border-soc-border transition px-5 py-3 rounded-xl font-semibold flex items-center gap-2">
+      <i class="fa-solid fa-volume-high"></i> Alarma activada
+    </button>
+    <span id="estado" class="text-sm text-slate-500 flex items-center gap-2">
+      <span class="h-2 w-2 rounded-full bg-slate-600"></span> Cámara detenida
+    </span>
+  </div>
+
+  <div class="grid md:grid-cols-3 gap-4 mt-6">
+    <div class="rounded-2xl border border-soc-border glass p-4 text-center">
+      <p class="text-slate-500 text-xs font-mono uppercase mb-1">Severidad actual</p>
+      <p id="statSeveridad" class="text-xl font-display font-extrabold text-emerald-400">BAJA</p>
+    </div>
+    <div class="rounded-2xl border border-soc-border glass p-4 text-center">
+      <p class="text-slate-500 text-xs font-mono uppercase mb-1">Área ocupada</p>
+      <p id="statArea" class="text-xl font-display font-extrabold">0%</p>
+    </div>
+    <div class="rounded-2xl border border-soc-border glass p-4 text-center">
+      <p class="text-slate-500 text-xs font-mono uppercase mb-1">Objetos detectados</p>
+      <p id="statObjetos" class="text-xl font-display font-extrabold">0</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const video = document.getElementById('video');
+const overlay = document.getElementById('overlay');
+const captura = document.getElementById('captura');
+const ctxOverlay = overlay.getContext('2d');
+const ctxCaptura = captura.getContext('2d');
+
+const btnIniciar = document.getElementById('btnIniciar');
+const btnDetener = document.getElementById('btnDetener');
+const btnSonido = document.getElementById('btnSonido');
+const COOLDOWN_VOZ_MS = 7000; // 6-8s: evita que la voz se encime frame a frame
+const estado = document.getElementById('estado');
+const estadoHud = document.getElementById('estadoHud');
+const dotRec = document.getElementById('dotRec');
+const relojHud = document.getElementById('relojHud');
+const banner = document.getElementById('bannerEmergencia');
+const bannerDetalle = document.getElementById('bannerDetalle');
+const statSeveridad = document.getElementById('statSeveridad');
+const statArea = document.getElementById('statArea');
+const statObjetos = document.getElementById('statObjetos');
+
+let stream = null;
+let intervalId = null;
+let relojId = null;
+let enviando = false;
+const INTERVALO_MS = 800;
+
+function actualizarReloj() {
+  const ahora = new Date();
+  relojHud.textContent = ahora.toLocaleString('es-PE', { hour12: false });
+}
+
+function colorSeveridad(nivel) {
+  if (nivel === 'ALTA') return 'text-red-500';
+  if (nivel === 'MEDIA') return 'text-amber-400';
+  return 'text-emerald-400';
+}
+
+function colorClase(clase) {
+  if (clase === 'fuego') return '#ef4444';
+  if (clase === 'humo') return '#f97316';
+  return '#38bdf8';
+}
+
+async function iniciarCamara() {
+  // Desbloqueo reforzado: reanuda el AudioContext y reproduce un tono real
+  // (aunque casi inaudible) + una síntesis de voz vacía, todo dentro del
+  // MISMO gesto de clic en "Iniciar cámara". Así, cuando entre el primer
+  // cuadro con fuego/humo en el bucle de /detectar_frame, la sirena y la
+  // voz suenan solas sin pedir otra interacción.
+  window.AlarmaVigiaFuego.desbloquearConTono();
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false });
+    video.srcObject = stream;
+    await video.play();
+
+    video.addEventListener('loadedmetadata', ajustarOverlay, { once: true });
+    ajustarOverlay();
+
+    btnIniciar.disabled = true;
+    btnDetener.disabled = false;
+    estado.innerHTML = '<span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span> Cámara activa - analizando...';
+    estadoHud.textContent = 'LIVE';
+    dotRec.classList.remove('bg-slate-500');
+    dotRec.classList.add('bg-red-500', 'animate-pulse');
+
+    relojId = setInterval(actualizarReloj, 1000);
+    actualizarReloj();
+
+    intervalId = setInterval(capturarYEnviar, INTERVALO_MS);
+  } catch (err) {
+    alert('No se pudo acceder a la cámara: ' + err.message);
+  }
+}
+
+function ajustarOverlay() {
+  overlay.width = video.clientWidth;
+  overlay.height = video.clientHeight;
+}
+
+function detenerCamara() {
+  if (intervalId) clearInterval(intervalId);
+  if (relojId) clearInterval(relojId);
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  video.srcObject = null;
+  ctxOverlay.clearRect(0, 0, overlay.width, overlay.height);
+  banner.classList.add('hidden');
+  banner.classList.remove('flex');
+  btnIniciar.disabled = false;
+  btnDetener.disabled = true;
+  estado.innerHTML = '<span class="h-2 w-2 rounded-full bg-slate-600"></span> Cámara detenida';
+  estadoHud.textContent = 'STANDBY';
+  dotRec.classList.add('bg-slate-500');
+  dotRec.classList.remove('bg-red-500', 'animate-pulse');
+}
+
+async function capturarYEnviar() {
+  if (enviando || video.readyState < 2) return;
+  enviando = true;
+
+  captura.width = video.videoWidth;
+  captura.height = video.videoHeight;
+  ctxCaptura.drawImage(video, 0, 0, captura.width, captura.height);
+  const dataUrl = captura.toDataURL('image/jpeg', 0.7);
+
+  try {
+    const resp = await fetch("{{ url_for('detectar_frame') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imagen: dataUrl }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      console.error('Error del servidor:', data.error);
+      return;
+    }
+    dibujarResultado(data);
+  } catch (err) {
+    console.error('Error al enviar frame:', err);
+  } finally {
+    enviando = false;
+  }
+}
+
+function dibujarResultado(data) {
+  ajustarOverlay();
+  ctxOverlay.clearRect(0, 0, overlay.width, overlay.height);
+
+  const escalaX = overlay.width / data.ancho;
+  const escalaY = overlay.height / data.alto;
+
+  data.detecciones.forEach(det => {
+    const [x1, y1, x2, y2] = det.bbox;
+    const color = colorClase(det.clase);
+    const ex1 = x1 * escalaX, ey1 = y1 * escalaY;
+    const ex2 = x2 * escalaX, ey2 = y2 * escalaY;
+
+    ctxOverlay.strokeStyle = color;
+    ctxOverlay.lineWidth = 3;
+    ctxOverlay.strokeRect(ex1, ey1, ex2 - ex1, ey2 - ey1);
+
+    const etiqueta = `${det.clase} ${(det.confianza * 100).toFixed(1)}%`;
+    ctxOverlay.font = 'bold 14px "JetBrains Mono", monospace';
+    const anchoTexto = ctxOverlay.measureText(etiqueta).width;
+    ctxOverlay.fillStyle = color;
+    ctxOverlay.fillRect(ex1, Math.max(0, ey1 - 20), anchoTexto + 10, 20);
+    ctxOverlay.fillStyle = '#ffffff';
+    ctxOverlay.fillText(etiqueta, ex1 + 5, Math.max(14, ey1 - 5));
+  });
+
+  const sev = data.severidad;
+  statSeveridad.textContent = sev.nivel;
+  statSeveridad.className = 'text-xl font-display font-extrabold ' + colorSeveridad(sev.nivel);
+  statArea.textContent = sev.porcentaje_area + '%';
+  statObjetos.textContent = data.detecciones.length;
+
+  if (data.alerta) {
+    banner.classList.remove('hidden');
+    banner.classList.add('flex');
+    bannerDetalle.textContent = `Severidad: ${sev.nivel} · Área ocupada: ${sev.porcentaje_area}%` +
+      (data.alerta_enviada ? ' · Alerta enviada a Telegram ✅' : ' · No se pudo notificar a Telegram');
+  } else {
+    banner.classList.add('hidden');
+    banner.classList.remove('flex');
+  }
+
+  if (sev.hay_fuego || sev.hay_humo) {
+    window.AlarmaVigiaFuego.alertarConCooldown(sev.hay_fuego, sev.hay_humo, COOLDOWN_VOZ_MS);
+  }
+}
+
+btnIniciar.addEventListener('click', iniciarCamara);
+btnDetener.addEventListener('click', detenerCamara);
+btnSonido.addEventListener('click', () => {
+  const silenciarAhora = !window.AlarmaVigiaFuego.estaSilenciado();
+  window.AlarmaVigiaFuego.establecerSilencio(silenciarAhora);
+  btnSonido.innerHTML = silenciarAhora
+    ? '<i class="fa-solid fa-volume-xmark"></i> Alarma silenciada'
+    : '<i class="fa-solid fa-volume-high"></i> Alarma activada';
+  btnSonido.classList.toggle('border-red-500/40', silenciarAhora);
+  btnSonido.classList.toggle('text-red-300', silenciarAhora);
+});
+window.addEventListener('resize', ajustarOverlay);
+window.addEventListener('beforeunload', detenerCamara);
+</script>
+{% endblock %}

@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block titulo %}Dashboard{% endblock %}
+
+{% block contenido %}
+<div class="flex flex-wrap items-center justify-between gap-4 mb-8">
+  <h1 class="text-2xl font-display font-bold flex items-center gap-3">
+    <i class="fa-solid fa-chart-line text-red-500"></i> Panel de monitoreo
+  </h1>
+  <a href="{{ url_for('exportar_excel') }}"
+     class="bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 transition px-5 py-3 rounded-xl font-semibold flex items-center gap-2">
+    <i class="fa-solid fa-file-excel"></i> Descargar reporte Excel
+  </a>
+</div>
+
+{% set clases_dict = {} %}
+{% for r in resumen %}
+  {% set _ = clases_dict.update({r.clase: r}) %}
+{% endfor %}
+
+<div class="grid md:grid-cols-3 gap-5 mb-10">
+  <div class="rounded-2xl border border-soc-border glass p-6 flex items-center gap-4">
+    <div class="h-12 w-12 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 text-xl">
+      <i class="fa-solid fa-database"></i>
+    </div>
+    <div>
+      <p class="text-slate-500 text-xs font-mono uppercase">Total de eventos</p>
+      <p class="text-3xl font-display font-extrabold">{{ total }}</p>
+    </div>
+  </div>
+
+  <div class="rounded-2xl border border-red-900/50 glass p-6 flex items-center gap-4">
+    <div class="h-12 w-12 rounded-xl bg-red-600/15 border border-red-600/30 flex items-center justify-center text-red-400 text-xl">
+      <i class="fa-solid fa-fire"></i>
+    </div>
+    <div>
+      <p class="text-red-400/80 text-xs font-mono uppercase">Alertas de fuego</p>
+      <p class="text-3xl font-display font-extrabold text-red-500">{{ clases_dict.get('fuego', {}).get('total', 0) }}</p>
+      {% if clases_dict.get('fuego') %}
+      <p class="text-[11px] text-slate-500">Confianza prom.: {{ "%.1f"|format(clases_dict['fuego'].confianza_promedio * 100) }}%</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="rounded-2xl border border-orange-900/50 glass p-6 flex items-center gap-4">
+    <div class="h-12 w-12 rounded-xl bg-orange-500/15 border border-orange-500/30 flex items-center justify-center text-orange-400 text-xl">
+      <i class="fa-solid fa-smog"></i>
+    </div>
+    <div>
+      <p class="text-orange-400/80 text-xs font-mono uppercase">Alertas de humo</p>
+      <p class="text-3xl font-display font-extrabold text-orange-400">{{ clases_dict.get('humo', {}).get('total', 0) }}</p>
+      {% if clases_dict.get('humo') %}
+      <p class="text-[11px] text-slate-500">Confianza prom.: {{ "%.1f"|format(clases_dict['humo'].confianza_promedio * 100) }}%</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="grid lg:grid-cols-3 gap-6 mb-10">
+  <div class="lg:col-span-2 rounded-2xl border border-soc-border glass p-6">
+    <h2 class="font-semibold mb-4 text-slate-300 flex items-center gap-2">
+      <i class="fa-solid fa-chart-column text-red-500"></i> Distribución de eventos por clase
+    </h2>
+    {% if resumen %}
+    <canvas id="graficoClases" height="220"></canvas>
+    {% else %}
+    <p class="text-slate-500 text-sm">Aún no hay eventos registrados. Analiza una imagen, video o usa la cámara en vivo.</p>
+    {% endif %}
+  </div>
+
+  <div class="rounded-2xl border border-soc-border glass p-6">
+    <h2 class="font-semibold mb-4 text-slate-300 flex items-center gap-2">
+      <i class="fa-solid fa-gauge-high text-cyan-400"></i> Resumen
+    </h2>
+    {% if resumen %}
+    <div class="space-y-4">
+      {% set max_total = resumen|map(attribute='total')|max %}
+      {% for r in resumen %}
+      <div>
+        <div class="flex items-center justify-between text-sm mb-1">
+          <span class="capitalize text-slate-300">{{ r.clase }}</span>
+          <span class="font-mono font-bold">{{ r.total }}</span>
+        </div>
+        <div class="bg-white/5 rounded-full h-2.5 overflow-hidden">
+          <div class="h-2.5 rounded-full {% if r.clase == 'fuego' %}bg-red-600{% elif r.clase == 'humo' %}bg-orange-500{% else %}bg-cyan-500{% endif %}"
+               style="width: {{ (r.total / max_total * 100) if max_total else 0 }}%">
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-slate-500 text-sm">Sin datos todavía.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="rounded-2xl border border-soc-border glass p-6 overflow-x-auto">
+  <h2 class="font-semibold mb-4 text-slate-300 flex items-center gap-2">
+    <i class="fa-solid fa-clock-rotate-left text-red-500"></i> Últimos 20 eventos
+  </h2>
+  {% if eventos %}
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="text-left text-slate-500 font-mono text-xs uppercase border-b border-soc-border">
+        <th class="py-2 pr-4">ID</th>
+        <th class="py-2 pr-4">Fecha</th>
+        <th class="py-2 pr-4">Fuente</th>
+        <th class="py-2 pr-4">Clase</th>
+        <th class="py-2 pr-4">Confianza</th>
+        <th class="py-2">Detalle</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in eventos %}
+      <tr class="border-b border-soc-border/60 hover:bg-white/5">
+        <td class="py-2 pr-4 text-slate-500">{{ e.id }}</td>
+        <td class="py-2 pr-4 whitespace-nowrap font-mono text-xs">{{ e.fecha }}</td>
+        <td class="py-2 pr-4 font-mono text-xs text-slate-400">{{ e.fuente }}</td>
+        <td class="py-2 pr-4">
+          <span class="px-2 py-1 rounded-full text-xs font-bold
+            {% if e.clase == 'fuego' %}bg-red-900/60 text-red-300
+            {% elif e.clase == 'humo' %}bg-orange-900/60 text-orange-300
+            {% else %}bg-slate-800 text-slate-300{% endif %}">
+            {{ e.clase }}
+          </span>
+        </td>
+        <td class="py-2 pr-4 font-mono">{{ "%.1f"|format(e.confianza * 100) }}%</td>
+        <td class="py-2 text-slate-400">{{ e.detalle }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-slate-500 text-sm">No hay eventos en el historial todavía.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if resumen %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+  const ctx = document.getElementById('graficoClases').getContext('2d');
+  const etiquetas = {{ resumen|map(attribute='clase')|list|tojson }};
+  const totales = {{ resumen|map(attribute='total')|list|tojson }};
+  const colores = etiquetas.map(c => c === 'fuego' ? '#ef4444' : c === 'humo' ? '#f97316' : '#38bdf8');
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: etiquetas,
+      datasets: [{
+        label: 'Eventos registrados',
+        data: totales,
+        backgroundColor: colores,
+        borderRadius: 8,
+        maxBarThickness: 60,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.08)' } },
+        y: { beginAtZero: true, ticks: { color: '#94a3b8', precision: 0 }, grid: { color: 'rgba(148,163,184,0.08)' } },
+      },
+    },
+  });
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,29 @@
+# Configuración del dataset para entrenamiento YOLOv8
+# Detección temprana de fuego y humo en almacenes (SENATI - PIAD-426)
+#
+# Estructura de carpetas esperada:
+# dataset/
+#   images/
+#     train/
+#     val/
+#     test/
+#   labels/
+#     train/
+#     val/
+#     test/
+#
+# NOTA: se omite deliberadamente la clave 'path:'. Ultralytics resuelve las
+# rutas de train/val/test relativas al directorio del propio 'data.yaml'
+# solo cuando 'path' no está presente; si se define 'path' (incluso como
+# '.'), lo resuelve relativo al directorio de trabajo desde el que se
+# ejecuta el script, no relativo a este archivo, lo que rompe el
+# entrenamiento si 'python entrenar.py' no se invoca desde 'dataset/'.
+
+train: images/train
+val: images/val
+test: images/test
+
+nc: 2
+names:
+  0: fuego
+  1: humo

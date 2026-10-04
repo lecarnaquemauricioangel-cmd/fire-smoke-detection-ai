@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block titulo %}Inicio{% endblock %}
+
+{% block contenido %}
+<section class="relative overflow-hidden rounded-3xl border border-soc-border glass p-8 md:p-12 mb-10">
+  <div class="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-red-600/20 blur-3xl"></div>
+  <div class="absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl"></div>
+
+  <div class="relative">
+    <span class="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 rounded-full mb-4">
+      <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+      Sistema activo
+    </span>
+
+    <h1 class="text-3xl md:text-5xl font-display font-extrabold mb-4 leading-tight">
+      Detección temprana de <span class="text-red-500">fuego</span> y
+      <span class="text-orange-400">humo</span> en almacenes
+    </h1>
+    <p class="text-slate-400 max-w-2xl">
+      Plataforma de visión artificial basada en YOLOv8 que analiza imágenes, video y
+      cámara en vivo para identificar focos de incendio, calcular la severidad del
+      evento y disparar alertas automáticas por Telegram.
+    </p>
+
+    {% if not modelo_personalizado %}
+    <div class="mt-6 inline-flex items-start gap-3 glass border border-amber-500/40 text-amber-200 px-4 py-3 rounded-xl text-sm max-w-2xl">
+      <i class="fa-solid fa-triangle-exclamation mt-0.5"></i>
+      <span>
+        Modo de pruebas: no se encontró un modelo entrenado válido en
+        <code class="text-amber-300">models/best.pt</code>. Ejecuta
+        <code class="text-amber-300">python preparar_modelo.py</code> para generarlo
+        automáticamente y habilitar la detección real de fuego/humo.
+      </span>
+    </div>
+    {% else %}
+    <div class="mt-6 inline-flex items-center gap-3 glass border border-emerald-500/30 text-emerald-300 px-4 py-3 rounded-xl text-sm">
+      <i class="fa-solid fa-circle-check"></i>
+      Modelo YOLOv8 calibrado para <strong>fuego</strong> y <strong>humo</strong> cargado correctamente.
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<div class="grid md:grid-cols-3 gap-5 mb-10">
+  <a href="{{ url_for('index') }}" class="group relative rounded-2xl border border-soc-border glass p-6 hover:border-red-500/50 transition overflow-hidden">
+    <div class="h-11 w-11 rounded-xl bg-red-600/15 border border-red-600/30 flex items-center justify-center mb-4 text-red-400 group-hover:scale-110 transition">
+      <i class="fa-solid fa-image"></i>
+    </div>
+    <h3 class="font-bold text-lg mb-1">Análisis de imagen</h3>
+    <p class="text-sm text-slate-400">Sube una fotografía del almacén y obtén un análisis inmediato.</p>
+  </a>
+  <a href="{{ url_for('video_pagina') }}" class="group relative rounded-2xl border border-soc-border glass p-6 hover:border-red-500/50 transition overflow-hidden">
+    <div class="h-11 w-11 rounded-xl bg-orange-500/15 border border-orange-500/30 flex items-center justify-center mb-4 text-orange-400 group-hover:scale-110 transition">
+      <i class="fa-solid fa-film"></i>
+    </div>
+    <h3 class="font-bold text-lg mb-1">Video grabado</h3>
+    <p class="text-sm text-slate-400">Procesa video cuadro por cuadro y reprodúcelo con salida H.264.</p>
+  </a>
+  <a href="{{ url_for('camara_pagina') }}" class="group relative rounded-2xl border border-soc-border glass p-6 hover:border-red-500/50 transition overflow-hidden">
+    <div class="h-11 w-11 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center mb-4 text-cyan-400 group-hover:scale-110 transition">
+      <i class="fa-solid fa-video"></i>
+    </div>
+    <h3 class="font-bold text-lg mb-1">Cámara en vivo</h3>
+    <p class="text-sm text-slate-400">Vigilancia en tiempo real usando la webcam del navegador.</p>
+  </a>
+</div>
+
+<section class="rounded-2xl border border-soc-border glass p-6 md:p-8 max-w-2xl mx-auto">
+  <h2 class="text-lg font-bold mb-1 flex items-center gap-2">
+    <i class="fa-solid fa-magnifying-glass text-red-500"></i> Analizar una imagen
+  </h2>
+  <p class="text-sm text-slate-500 mb-5">Formatos soportados: PNG, JPG, JPEG, BMP.</p>
+
+  <form action="{{ url_for('detectar_imagen') }}" method="post" enctype="multipart/form-data" id="formImagen">
+    <label id="zonaDrop" for="inputImagen"
+           class="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-soc-border rounded-2xl py-12 px-6 cursor-pointer
+                  hover:border-red-500/60 hover:bg-red-500/5 transition text-center">
+      <i class="fa-solid fa-cloud-arrow-up text-4xl text-slate-500"></i>
+      <p class="text-slate-300 font-medium">Arrastra una imagen aquí o haz clic para seleccionar</p>
+      <p id="nombreArchivo" class="text-xs text-slate-500 font-mono"></p>
+      <input id="inputImagen" type="file" name="imagen" accept=".png,.jpg,.jpeg,.bmp" required class="hidden">
+    </label>
+
+    <button type="submit" id="btnAnalizar"
+            class="mt-5 w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500
+                   transition text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-glow">
+      <i class="fa-solid fa-bolt"></i> Analizar imagen
+    </button>
+
+    <div id="avisoAnalizando" class="hidden mt-4">
+      <div class="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+        <div class="h-full w-1/3 bg-gradient-to-r from-red-600 to-orange-500 rounded-full animate-barra-carga"></div>
+      </div>
+      <p class="text-center text-xs text-amber-300 mt-2 flex items-center justify-center gap-2">
+        <i class="fa-solid fa-spinner fa-spin"></i> Analizando imagen con YOLOv8...
+      </p>
+    </div>
+  </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Todo el flujo se reengancha con inicializarPaginaIndex() cada vez que se
+  // reemplaza el contenido de <main> (éxito o error de validación), porque
+  // los <script> insertados vía innerHTML nunca se ejecutan solos.
+  function inicializarPaginaIndex() {
+    const zonaDrop = document.getElementById('zonaDrop');
+    const inputImagen = document.getElementById('inputImagen');
+    const nombreArchivo = document.getElementById('nombreArchivo');
+    const formImagen = document.getElementById('formImagen');
+    const btnAnalizar = document.getElementById('btnAnalizar');
+    const avisoAnalizando = document.getElementById('avisoAnalizando');
+
+    function mostrarNombre(file) {
+      if (file) {
+        nombreArchivo.textContent = `📎 ${file.name} (${(file.size / 1024).toFixed(0)} KB)`;
+        zonaDrop.classList.add('border-emerald-500/60', 'bg-emerald-500/5');
+      }
+    }
+
+    if (zonaDrop && inputImagen) {
+      inputImagen.addEventListener('change', () => mostrarNombre(inputImagen.files[0]));
+      ['dragenter', 'dragover'].forEach(evt => {
+        zonaDrop.addEventListener(evt, (e) => {
+          e.preventDefault();
+          zonaDrop.classList.add('border-red-500/70', 'bg-red-500/10');
+        });
+      });
+      ['dragleave', 'drop'].forEach(evt => {
+        zonaDrop.addEventListener(evt, (e) => {
+          e.preventDefault();
+          zonaDrop.classList.remove('border-red-500/70', 'bg-red-500/10');
+        });
+      });
+      zonaDrop.addEventListener('drop', (e) => {
+        const archivos = e.dataTransfer.files;
+        if (archivos.length) {
+          inputImagen.files = archivos;
+          mostrarNombre(archivos[0]);
+        }
+      });
+    }
+
+    if (!formImagen) return;
+    formImagen.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      // CRÍTICO: desbloquear el AudioContext EN ESTE MISMO gesto de clic.
+      // Como el envío ahora es fetch() (sin recargar la página), este
+      // mismo contexto sigue "running" cuando llegue la respuesta.
+      window.AlarmaVigiaFuego.desbloquearConTono();
+
+      const textoOriginalBtn = btnAnalizar.innerHTML;
+      btnAnalizar.disabled = true;
+      btnAnalizar.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Analizando...';
+      if (avisoAnalizando) avisoAnalizando.classList.remove('hidden');
+
+      try {
+        const formData = new FormData(formImagen);
+        const resp = await fetch(formImagen.action, { method: 'POST', body: formData });
+        const html = await resp.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const nuevoMain = doc.querySelector('main');
+        if (!nuevoMain) throw new Error('Respuesta inesperada del servidor.');
+
+        document.querySelector('main').innerHTML = nuevoMain.innerHTML;
+        const nuevoTitulo = doc.querySelector('title');
+        if (nuevoTitulo) document.title = nuevoTitulo.textContent;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        const datosEl = document.getElementById('datosDeteccion');
+        if (datosEl) {
+          const datos = JSON.parse(datosEl.textContent);
+          const disparar = datos.nivel === 'MEDIA' || datos.nivel === 'ALTA' || datos.detecciones > 0;
+          if (disparar) {
+            // Suena YA, sin esperar ningún clic adicional: el AudioContext
+            // desbloqueado arriba sigue vivo porque nunca hubo navegación.
+            window.AlarmaVigiaFuego.alertar(datos.hay_fuego, datos.hay_humo);
+          }
+          window.AlarmaVigiaFuego.inicializarBotonSilenciar(
+            document.getElementById('btnSilenciar'), datos.hay_fuego, datos.hay_humo
+          );
+        }
+        inicializarPaginaIndex(); // re-engancha el formulario si volvió (p.ej. error de validación)
+      } catch (err) {
+        console.error('[index] Error al analizar imagen:', err);
+        btnAnalizar.disabled = false;
+        btnAnalizar.innerHTML = textoOriginalBtn;
+        if (avisoAnalizando) avisoAnalizando.classList.add('hidden');
+        alert('Error de red al analizar la imagen. Verifica tu conexión e inténtalo de nuevo.');
+      }
+    });
+  }
+
+  inicializarPaginaIndex();
+</script>
+{% endblock %}

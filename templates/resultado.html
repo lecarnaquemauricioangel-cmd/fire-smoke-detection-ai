@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block titulo %}Resultado del análisis{% endblock %}
+
+{% block contenido %}
+<div class="flex items-center justify-between flex-wrap gap-3 mb-6">
+  <h1 class="text-2xl font-display font-bold flex items-center gap-3">
+    <i class="fa-solid fa-magnifying-glass-chart text-red-500"></i> Resultado del análisis
+  </h1>
+  <a href="{{ url_for('index') }}" class="text-sm text-slate-400 hover:text-white flex items-center gap-2 transition">
+    <i class="fa-solid fa-arrow-left"></i> Analizar otra imagen
+  </a>
+</div>
+
+{% set disparar_alarma = severidad.nivel in ['MEDIA', 'ALTA'] or detecciones|length > 0 %}
+<script type="application/json" id="datosDeteccion">{{ {
+  "hay_fuego": severidad.hay_fuego,
+  "hay_humo": severidad.hay_humo,
+  "nivel": severidad.nivel,
+  "detecciones": detecciones|length,
+}|tojson }}</script>
+{% if disparar_alarma %}
+<div class="mb-4 flex justify-end">
+  <button id="btnSilenciar" type="button"
+          class="bg-white/5 hover:bg-white/10 border border-soc-border transition px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2">
+    <i class="fa-solid fa-volume-xmark"></i> Desactivar alarma / Silenciar
+  </button>
+</div>
+{% endif %}
+
+{% if severidad.hay_fuego %}
+<div class="relative mb-8 rounded-2xl border-2 border-red-500 bg-red-700/20 px-6 py-5 flex items-center gap-4 animate-pulse overflow-hidden">
+  <div class="absolute inset-0 scanline"></div>
+  <span class="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-red-600 shadow-glow text-2xl">
+    <i class="fa-solid fa-fire-flame-curved"></i>
+  </span>
+  <div class="relative">
+    <p class="font-display font-extrabold text-xl tracking-wide text-red-300">
+      ⚠ EMERGENCIA: FUEGO DETECTADO
+    </p>
+    <p class="text-sm text-red-200/90 flex items-center gap-2 mt-1">
+      <i class="fa-brands fa-telegram"></i>
+      {% if alerta_enviada %}
+        Alerta enviada correctamente al canal de Telegram configurado.
+      {% else %}
+        No se pudo enviar la alerta a Telegram (verifica TOKEN / CHAT_ID).
+      {% endif %}
+    </p>
+  </div>
+</div>
+{% endif %}
+
+<div class="grid md:grid-cols-2 gap-5 mb-8">
+  <div class="rounded-2xl border border-soc-border glass p-4">
+    <h2 class="text-xs uppercase tracking-widest text-slate-500 font-mono mb-3 flex items-center gap-2">
+      <i class="fa-regular fa-image"></i> Imagen original
+    </h2>
+    <img src="{{ imagen_original }}" alt="Imagen original" class="rounded-xl w-full object-contain border border-soc-border">
+  </div>
+  <div class="rounded-2xl border border-soc-border glass p-4">
+    <h2 class="text-xs uppercase tracking-widest text-slate-500 font-mono mb-3 flex items-center gap-2">
+      <i class="fa-solid fa-draw-polygon"></i> Detecciones
+    </h2>
+    <img src="{{ imagen_resultado }}" alt="Imagen con detecciones" class="rounded-xl w-full object-contain border border-soc-border">
+  </div>
+</div>
+
+<div class="grid md:grid-cols-3 gap-5 mb-8">
+  <div class="rounded-2xl border border-soc-border glass p-5 text-center">
+    <p class="text-xs uppercase tracking-widest text-slate-500 font-mono mb-2">Nivel de severidad</p>
+    <span class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold border
+      {% if severidad.nivel == 'ALTA' %}bg-red-600/20 text-red-400 border-red-600/40
+      {% elif severidad.nivel == 'MEDIA' %}bg-amber-500/20 text-amber-300 border-amber-500/40
+      {% else %}bg-emerald-500/20 text-emerald-300 border-emerald-500/40{% endif %}">
+      <i class="fa-solid {% if severidad.nivel == 'ALTA' %}fa-triangle-exclamation{% elif severidad.nivel == 'MEDIA' %}fa-circle-exclamation{% else %}fa-shield-halved{% endif %}"></i>
+      {{ severidad.nivel }}
+    </span>
+  </div>
+  <div class="rounded-2xl border border-soc-border glass p-5 text-center">
+    <p class="text-xs uppercase tracking-widest text-slate-500 font-mono mb-2">Área ocupada</p>
+    <p class="text-2xl font-display font-extrabold">{{ severidad.porcentaje_area }}%</p>
+  </div>
+  <div class="rounded-2xl border border-soc-border glass p-5 text-center">
+    <p class="text-xs uppercase tracking-widest text-slate-500 font-mono mb-2">Objetos detectados</p>
+    <p class="text-2xl font-display font-extrabold">{{ detecciones|length }}</p>
+  </div>
+</div>
+
+<div class="rounded-2xl border border-soc-border glass p-5 mb-8 overflow-x-auto">
+  <h2 class="font-semibold mb-4 text-slate-300 flex items-center gap-2">
+    <i class="fa-solid fa-list-check text-red-500"></i> Detalle de detecciones
+  </h2>
+  {% if detecciones %}
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="text-left text-slate-500 font-mono text-xs uppercase border-b border-soc-border">
+        <th class="py-2 pr-4">#</th>
+        <th class="py-2 pr-4">Clase</th>
+        <th class="py-2 pr-4">Confianza</th>
+        <th class="py-2">Bounding box (x1, y1, x2, y2)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in detecciones %}
+      <tr class="border-b border-soc-border/60 hover:bg-white/5">
+        <td class="py-2 pr-4 text-slate-500">{{ loop.index }}</td>
+        <td class="py-2 pr-4">
+          <span class="px-2 py-1 rounded-full text-xs font-bold
+            {% if d.clase == 'fuego' %}bg-red-900/60 text-red-300
+            {% elif d.clase == 'humo' %}bg-orange-900/60 text-orange-300
+            {% else %}bg-slate-800 text-slate-300{% endif %}">
+            <i class="fa-solid {% if d.clase == 'fuego' %}fa-fire{% elif d.clase == 'humo' %}fa-smog{% else %}fa-cube{% endif %}"></i>
+            {{ d.clase }}
+          </span>
+        </td>
+        <td class="py-2 pr-4 font-mono">{{ "%.1f"|format(d.confianza * 100) }}%</td>
+        <td class="py-2 font-mono text-xs text-slate-500">
+          [{{ "%.0f"|format(d.bbox[0]) }}, {{ "%.0f"|format(d.bbox[1]) }},
+           {{ "%.0f"|format(d.bbox[2]) }}, {{ "%.0f"|format(d.bbox[3]) }}]
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-slate-500 text-sm flex items-center gap-2">
+    <i class="fa-solid fa-circle-check text-emerald-500"></i> No se detectaron objetos de interés en esta imagen.
+  </p>
+  {% endif %}
+</div>
+
+<div class="flex flex-wrap gap-3">
+  <a href="{{ url_for('index') }}" class="bg-white/5 hover:bg-white/10 border border-soc-border transition px-5 py-3 rounded-xl font-semibold flex items-center gap-2">
+    <i class="fa-solid fa-arrow-left"></i> Analizar otra imagen
+  </a>
+  <a href="{{ url_for('dashboard') }}" class="bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 transition px-5 py-3 rounded-xl font-semibold flex items-center gap-2 shadow-glow">
+    <i class="fa-solid fa-chart-line"></i> Ver dashboard
+  </a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% set disparar_alarma = severidad.nivel in ['MEDIA', 'ALTA'] or detecciones|length > 0 %}
+{% if disparar_alarma %}
+<script>
+  // Fallback para cuando esta página se carga completa (navegación clásica,
+  // sin pasar por el fetch() de index.html/video.html): usa el mecanismo de
+  // reintento en el primer gesto + banner. Cuando el fetch de index.html/
+  // video.html inyecta este mismo HTML sin recargar la página, es ESE
+  // código (no este bloque, que nunca se ejecuta al insertarse vía
+  // innerHTML) el que llama a AlarmaVigiaFuego.alertar(...) directamente,
+  // porque el AudioContext ya quedó desbloqueado desde el clic original.
+  window.AlarmaVigiaFuego.alertarAlCargar(
+    {{ severidad.hay_fuego|tojson }},
+    {{ severidad.hay_humo|tojson }}
+  );
+  window.AlarmaVigiaFuego.inicializarBotonSilenciar(
+    document.getElementById('btnSilenciar'),
+    {{ severidad.hay_fuego|tojson }},
+    {{ severidad.hay_humo|tojson }}
+  );
+</script>
+{% endif %}
+{% endblock %}
